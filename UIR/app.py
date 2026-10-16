@@ -52,16 +52,17 @@ st.markdown("""
 
 .kpi {
     background:white; border:1px solid #C8E6C9; border-radius:12px;
-    padding:15px 18px; min-height:105px;
+    padding:14px 16px; height:100%; min-height:100px;
     box-shadow:0 2px 8px rgba(46,125,50,.06);
+    display: flex; flex-direction: column; justify-content: center;
 }
-.kpi-label { color:#388E3C; font-size:12px; font-weight:700; }
-.kpi-value { color:#1B5E20; font-size:27px; font-weight:800; margin-top:3px; }
-.kpi-help { color:#66A36B; font-size:11px; }
+.kpi-label { color:#388E3C; font-size:11px; font-weight:700; text-transform: uppercase; }
+.kpi-value { color:#1B5E20; font-size:24px; font-weight:800; margin-top:2px; }
+.kpi-help { color:#558B2F; font-size:10.5px; font-style:italic; margin-top:2px; }
 
 .section {
     color:#1B5E20; font-size:18px; font-weight:800;
-    margin:22px 0 8px;
+    margin:22px 0 12px;
     border-bottom: 2px solid #C8E6C9;
     padding-bottom: 4px;
 }
@@ -69,25 +70,17 @@ st.markdown("""
 .alert-red { background:#FEF2F2; border-left:5px solid #DC2626; padding:12px; border-radius:8px; color:#7F1D1D; }
 .alert-amber { background:#FFF7ED; border-left:5px solid #F59E0B; padding:12px; border-radius:8px; color:#78350F; }
 .alert-green { background:#E8F5E9; border-left:5px solid #2E7D32; padding:12px; border-radius:8px; color:#1B5E20; }
-
-div[data-testid="stMetric"] {
-    background:white; border:1px solid #C8E6C9; padding:12px;
-    border-radius:12px;
-}
 </style>
 """, unsafe_allow_html=True)
 
 # ============================================================
 # PALETAS DE COLOR
 # ============================================================
-# Paleta categórica: tonos medios/oscuros (el texto blanco se lee bien)
-# y distinguibles entre sí, en armonía con el tema verde.
 PALETA = [
     "#2E7D32", "#1565C0", "#EF6C00", "#6A1B9A", "#00838F", "#AD1457",
     "#8D6E63", "#558B2F", "#5C6BC0", "#C62828", "#00695C", "#9E9D24",
 ]
 
-# Colores con significado para el Estado (semáforo)
 REGLAS_ESTADO = [
     ("DESESTIMADA", "#C62828"),                          # rojo
     ("RIESGO|RETRAS|OBSERV|PENDIENTE", "#E65100"),       # naranja
@@ -100,7 +93,6 @@ FALLBACK_ESTADO = ["#6A1B9A", "#00838F", "#AD1457", "#5D4037", "#5C6BC0"]
 
 
 def mapa_estados(estados):
-    """Asigna un color fijo y con significado a cada estado."""
     cmap, extra = {}, 0
     for e in sorted(estados):
         for patron, color in REGLAS_ESTADO:
@@ -114,7 +106,6 @@ def mapa_estados(estados):
 
 
 def mapa_categorias(valores):
-    """Color estable por categoría (el mismo departamento = mismo color en todos los gráficos)."""
     return {v: PALETA[i % len(PALETA)] for i, v in enumerate(sorted(valores))}
 
 
@@ -128,7 +119,6 @@ def sin_acentos(texto: str) -> str:
 
 
 def clave_pq(p: str):
-    """Ordena PQ 1, PQ 2, ..., PQ 10 numéricamente; el resto al final."""
     m = re.search(r"\d+", p)
     return (0, int(m.group()), p) if m and p.startswith("PQ") else (1, 0, p)
 
@@ -137,7 +127,6 @@ _PLOTLY_TIENE_WIDTH = "width" in inspect.signature(st.plotly_chart).parameters
 
 
 def mostrar(fig):
-    """Compatible con versiones nuevas y antiguas de Streamlit."""
     if _PLOTLY_TIENE_WIDTH:
         st.plotly_chart(fig, width="stretch")
     else:
@@ -149,7 +138,6 @@ def titulo(texto):
 
 
 def pie(data, names, values, title, cmap=None, fmt="%{value:,.0f}", height=340):
-    """Gráfico circular con colores distinguibles, etiquetas legibles y leyenda lateral."""
     fig = px.pie(
         data,
         names=names,
@@ -175,7 +163,7 @@ def pie(data, names, values, title, cmap=None, fmt="%{value:,.0f}", height=340):
         paper_bgcolor="white",
         legend=dict(orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.02),
         uniformtext_minsize=10,
-        uniformtext_mode="hide",  # oculta etiquetas de porciones muy pequeñas
+        uniformtext_mode="hide",
     )
     return fig
 
@@ -198,7 +186,7 @@ def barras(data, x, y, title, color=PALETA[0], fmt="%{y:,.0f}", height=320, orde
 
 
 # ============================================================
-# CARGA
+# CARGA DE DATOS
 # ============================================================
 BASE = Path(__file__).resolve().parent
 EXCEL = BASE / "EXCEL DS 164 EF.xlsx"
@@ -239,7 +227,6 @@ def cargar_excel(_mtime: float):
             data[c] = 0
         data[c] = pd.to_numeric(data[c], errors="coerce").fillna(0)
 
-    # Estado en mayúsculas y SIN acentos (EJECUCIÓN == EJECUCION)
     data["Estado"] = (
         data["Estado"].fillna("SIN ESTADO").astype(str).str.strip().str.upper().map(sin_acentos)
     )
@@ -277,7 +264,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ============================================================
-# FILTROS (en cascada: Departamento → Provincia → Distrito)
+# FILTROS (Con placeholder en español)
 # ============================================================
 st.markdown('<div class="section">🔎 Filtros del portafolio</div>', unsafe_allow_html=True)
 f1, f2, f3, f4, f5 = st.columns([1.1, 1.1, 1.1, 1.2, 1.2])
@@ -287,15 +274,15 @@ def opciones(frame, col, key=None):
     return sorted(frame[col].dropna().astype(str).unique().tolist(), key=key)
 
 
-departamentos = f1.multiselect("Departamento", opciones(df0, "Departamento"))
+departamentos = f1.multiselect("Departamento", opciones(df0, "Departamento"), placeholder="Seleccionar opciones")
 d1 = df0[df0["Departamento"].isin(departamentos)] if departamentos else df0
 
-provincias = f2.multiselect("Provincia", opciones(d1, "Provincia"))
+provincias = f2.multiselect("Provincia", opciones(d1, "Provincia"), placeholder="Seleccionar opciones")
 d2 = d1[d1["Provincia"].isin(provincias)] if provincias else d1
 
-distritos = f3.multiselect("Distrito", opciones(d2, "Distrito"))
-paquetes = f4.multiselect("Paquete", opciones(df0, "Paquete", key=clave_pq))
-estados = f5.multiselect("Estado", opciones(df0, "Estado"))
+distritos = f3.multiselect("Distrito", opciones(d2, "Distrito"), placeholder="Seleccionar opciones")
+paquetes = f4.multiselect("Paquete", opciones(df0, "Paquete", key=clave_pq), placeholder="Seleccionar opciones")
+estados = f5.multiselect("Estado", opciones(df0, "Estado"), placeholder="Seleccionar opciones")
 
 df = df0.copy()
 if departamentos:
@@ -314,43 +301,67 @@ if df.empty:
     st.stop()
 
 # ============================================================
-# KPIs
+# CÁLCULO DE KPIS
 # ============================================================
 total = len(df)
 ejecucion = int(df["Estado"].str.contains("EJECUCION", na=False).sum())
-contratacion = int(df["Estado"].str.contains("CONTRATACION", na=False).sum())
+encontratacion = int(df["Estado"].str.contains("EN CONTRATACION", na=False).sum())
 desestimadas = int(df["Estado"].str.contains("DESESTIMADA", na=False).sum())
+contratado = int(df["Estado"].str.contains("CONTRADO", na=False).sum())
+culminadas = int(df["Estado"].str.contains("CULMINADO", na=False).sum())
+
 benef = df["Beneficiarios"].sum()
 ha = df["Hectareas"].sum()
 km = df["Km"].sum()
-paquetes_activos = df.loc[df["Paquete"].str.match(r"^PQ \d+$"), "Paquete"].nunique()
+
+paquetes_activos = df.loc[
+    df["Paquete"].str.match(r"^PQ \d+$", na=False),
+    "Paquete"
+].nunique()
 
 atencion_mask = df["Estado"].str.contains(
-    "CONTRATACION|DESESTIMADA|PENDIENTE|RIESGO|RETRAS|OBSERV", regex=True, na=False
+    "CONTRATACION|DESESTIMADA|PENDIENTE|RIESGO|RETRAS|OBSERV",
+    regex=True,
+    na=False
 )
 atencion = int(atencion_mask.sum())
 
+# ============================================================
+# COMPONENTE KPI ESTILIZADO (CON ACLARACIÓN DE CORTE)
+# ============================================================
 st.markdown('<div class="section">📌 Indicadores ejecutivos</div>', unsafe_allow_html=True)
-k = st.columns(8)
 
 
-def kpi(c, label, value):
-    c.markdown(f"""
-    <div class="kpi">
-      <div class="kpi-label">{label}</div>
-      <div class="kpi-value">{value}</div>
-    </div>
-    """, unsafe_allow_html=True)
+def kpi(c, label, value, help_text=f"Acumulado al {FECHA_CORTE}"):
+    c.markdown(
+        f"""
+        <div class="kpi">
+            <div class="kpi-label">{label}</div>
+            <div class="kpi-value">{value}</div>
+            <div class="kpi-help">{help_text}</div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 
-kpi(k[0], "PAQUETES", f"{paquetes_activos}")
-kpi(k[1], "REGISTROS", f"{total:,}")
-kpi(k[2], "EN EJECUCIÓN", f"{ejecucion:,}")
-kpi(k[3], "EN CONTRATACIÓN", f"{contratacion:,}")
-kpi(k[4], "DESESTIMADAS", f"{desestimadas:,}")
-kpi(k[5], "BENEFICIARIOS", f"{benef:,.0f}")
-kpi(k[6], "HECTÁREAS", f"{ha:,.2f}")
-kpi(k[7], "KM", f"{km:,.2f}")
+# Fila 1: Estado Operativo (5 columnas)
+fila1 = st.columns(5, gap="small")
+kpi(fila1[0], "PAQUETES DESCOLMATACIÓN", f"{paquetes_activos:,}", "Paquetes identificados")
+kpi(fila1[1], "INTERVENCIONES TOTALES", f"{total:,}", "Total registradas")
+kpi(fila1[2], "CONTRATADOS", f"{contratado:,}", "Procesos adjudicados")
+kpi(fila1[3], "POR CONTRATAR", f"{encontratacion:,}", "En proceso de selección")
+kpi(fila1[4], "EN EJECUCIÓN", f"{ejecucion:,}", "Obras/Actividades activas")
+
+st.markdown("<div style='margin-bottom: 12px;'></div>", unsafe_allow_html=True)
+
+# Fila 2: Cierre e Impacto Físico (5 columnas)
+fila2 = st.columns(5, gap="small")
+kpi(fila2[0], "CULMINADAS", f"{culminadas:,}", "Acumulado al corte")
+kpi(fila2[1], "DESESTIMADAS", f"{desestimadas:,}", "Sin intervención")
+kpi(fila2[2], "BENEFICIARIOS", f"{benef:,.0f}", f"Acumulado al {FECHA_CORTE}")
+kpi(fila2[3], "HECTÁREAS", f"{ha:,.2f}", f"Acumulado al {FECHA_CORTE}")
+kpi(fila2[4], "KILÓMETROS", f"{km:,.2f}", f"Acumulado al {FECHA_CORTE}")
 
 # ============================================================
 # PORTAFOLIO POR PAQUETE
@@ -413,7 +424,7 @@ with e2:
     )
     mostrar(fig)
 
-# Alertas con datos reales (en lugar de textos genéricos)
+# Alertas
 a1, a2, a3 = st.columns(3)
 pct_atencion = atencion / total * 100
 pct_ejec = ejecucion / total * 100
@@ -488,7 +499,7 @@ with t2:
     else:
         mostrar(pie(p, "Provincia", "Valor", f"{nom} por provincia · {dept}", fmt=fmt_ind))
 
-# Estados dentro del departamento elegido (mismo selector, sin repetir controles)
+# Estados dentro del departamento elegido
 df_dept = df[df["Departamento"] == dept]
 u1, u2 = st.columns(2)
 
@@ -523,10 +534,12 @@ paquete_detalle = st.selectbox("Selecciona un paquete", opciones_pq)
 det = df[df["Paquete"] == paquete_detalle]
 
 q1, q2, q3, q4 = st.columns(4)
-q1.metric("Intervenciones", f"{len(det):,}")
-q2.metric("Beneficiarios", f"{det['Beneficiarios'].sum():,.0f}")
-q3.metric("Ha", f"{det['Hectareas'].sum():,.2f}")
-q4.metric("Km", f"{det['Km'].sum():,.2f}")
+kpi(q1, "INTERVENCIONES", f"{len(det):,}", f"Acumulado al {FECHA_CORTE}")
+kpi(q2, "BENEFICIARIOS", f"{det['Beneficiarios'].sum():,.0f}", f"Acumulado al {FECHA_CORTE}")
+kpi(q3, "HECTÁREAS", f"{det['Hectareas'].sum():,.2f}", f"Acumulado al {FECHA_CORTE}")
+kpi(q4, "KILÓMETROS", f"{det['Km'].sum():,.2f}", f"Acumulado al {FECHA_CORTE}")
+
+st.markdown("<div style='margin-bottom: 16px;'></div>", unsafe_allow_html=True)
 
 v1, v2 = st.columns(2)
 with v1:
@@ -538,7 +551,7 @@ with v2:
                 cmap=CMAP_DEPTO))
 
 # ============================================================
-# INFORMACIÓN PENDIENTE (agrupa lo que antes estaba repetido en 4 bloques)
+# INFORMACIÓN PENDIENTE
 # ============================================================
 with st.expander("📝 Información que falta en el Excel para completar el dashboard"):
     st.markdown("""
@@ -556,7 +569,7 @@ with st.expander("📝 Información que falta en el Excel para completar el dash
 # FOOTER
 # ============================================================
 st.caption(
-    f"Descolmatación · {CAMPANA} · Información al {FECHA_CORTE} · "
+    f"Descolmatación · {CAMPANA} · Información acumulada al {FECHA_CORTE} (corte en desarrollo) · "
     "Fuente: EXCEL DS 164 EF.xlsx · Agrupación por paquete normalizado "
     "(ej.: PIURA PQ 2 y cualquier otro registro con PQ 2 se consolidan como PQ 2)."
 )
