@@ -334,24 +334,23 @@ st.markdown('<div class="section">📌 Indicadores ejecutivos</div>', unsafe_all
 k = st.columns(8)
 
 
-def kpi(c, label, value, help_text):
+def kpi(c, label, value):
     c.markdown(f"""
     <div class="kpi">
       <div class="kpi-label">{label}</div>
       <div class="kpi-value">{value}</div>
-      <div class="kpi-help">{help_text}</div>
     </div>
     """, unsafe_allow_html=True)
 
 
-kpi(k[0], "PAQUETES", f"{paquetes_activos}", "PQ únicos")
-kpi(k[1], "REGISTROS", f"{total:,}", "Intervenciones")
-kpi(k[2], "EN EJECUCIÓN", f"{ejecucion:,}", "Estado actual")
-kpi(k[3], "EN CONTRATACIÓN", f"{contratacion:,}", "Requieren seguimiento")
-kpi(k[4], "DESESTIMADAS", f"{desestimadas:,}", "Fuera del portafolio activo")
-kpi(k[5], "BENEFICIARIOS", f"{benef:,.0f}", "Hasta la fecha")
-kpi(k[6], "HECTÁREAS", f"{ha:,.2f}", "Área beneficiada")
-kpi(k[7], "KM", f"{km:,.2f}", "Intervención hasta la fecha")
+kpi(k[0], "PAQUETES", f"{paquetes_activos}")
+kpi(k[1], "REGISTROS", f"{total:,}")
+kpi(k[2], "EN EJECUCIÓN", f"{ejecucion:,}")
+kpi(k[3], "EN CONTRATACIÓN", f"{contratacion:,}")
+kpi(k[4], "DESESTIMADAS", f"{desestimadas:,}")
+kpi(k[5], "BENEFICIARIOS", f"{benef:,.0f}")
+kpi(k[6], "HECTÁREAS", f"{ha:,.2f}")
+kpi(k[7], "KM", f"{km:,.2f}")
 
 # ============================================================
 # PORTAFOLIO POR PAQUETE
