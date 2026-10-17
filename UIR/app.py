@@ -24,7 +24,7 @@ UMBRAL_ATRASO_PP = 10               # puntos porcentuales de atraso (real vs pro
 FECHA_CORTE_DT = pd.to_datetime(FECHA_CORTE, format="%d/%m/%Y")
 
 st.set_page_config(
-    page_title=f"Descolmatación FEN · Corte {FECHA_CORTE}",
+    page_title=f"Descolmatación FEN · Corte {FECHA_CORTE} - UIR",
     page_icon="🌊",
     layout="wide",
     initial_sidebar_state="collapsed",
