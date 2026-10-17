@@ -15,7 +15,7 @@ CAMPANA = "FEN 2026-2027"
 FECHA_CORTE = "15/10/2026"          # formato DD/MM/AAAA
 TITULO_SITUACIONAL = f"ESTADO SITUACIONAL DE LAS ACTIVIDADES - {CAMPANA}"
 
-# Las intervenciones desestimadas no generan impacto: si True, sus
+# Las intervenciones atendidas en otros proyectos no suman impacto aquí: si True, sus
 # Km / Beneficiarios / Hectáreas se ponen en 0 para que no inflen los totales.
 EXCLUIR_DESESTIMADAS_DEL_IMPACTO = True
 UMBRAL_DIAS_ESTANCADO = 30          # días en "EN CONTRATACION" para marcar estancamiento
@@ -88,7 +88,7 @@ PALETA = [
 ]
 
 REGLAS_ESTADO = [
-    ("DESESTIMADA", "#C62828"),                          # rojo
+    ("ATENDIDO EN OTROS PROYECTOS", "#C62828"),                          # rojo
     ("RIESGO|RETRAS|OBSERV|PENDIENTE", "#E65100"),       # naranja
     ("CONTRATACION", "#E89B0C"),                         # ámbar
     ("CONTRATADO", "#00838F"),                           # turquesa
@@ -218,7 +218,7 @@ COLUMNAS_FECHA_OPC = ["Fecha_Inicio", "Fecha_Fin_Prog", "Fecha_Fin_Real", "Fecha
 
 def normalizar_paquete(v):
     """'Lima PQ1', 'LIMA PQ 1' y 'Lima Pq. 1' -> 'LIMA PQ 1'. Todo lo que no sea
-    'DEPTO PQ n' (vacío, 'DESESTIMADA', etc.) -> 'SIN PAQUETE'."""
+    'DEPTO PQ n' (vacío, 'ATENDIDO EN OTROS PROYECTOS', etc.) -> 'SIN PAQUETE'."""
     if pd.isna(v):
         return "SIN PAQUETE"
     t = re.sub(r"\s+", " ", sin_acentos(str(v)).upper().strip())
@@ -274,10 +274,11 @@ def cargar_excel(_mtime: float):
     data["Estado"] = (
         data["Estado"].fillna("SIN ESTADO").astype(str).str.strip().str.upper().map(sin_acentos)
         .str.replace("CONTRADO", "CONTRATADO", regex=False)   # typo frecuente en el Excel
+        .str.replace("DESESTIMADA", "ATENDIDO EN OTROS PROYECTOS", regex=False)   # nombre acordado para mostrar
     )
 
     if EXCLUIR_DESESTIMADAS_DEL_IMPACTO:
-        des = data["Estado"].str.contains("DESESTIMADA", na=False)
+        des = data["Estado"].str.contains("ATENDIDO EN OTROS PROYECTOS", na=False)
         data.loc[des, ["Km", "Beneficiarios", "Hectareas"]] = 0
 
     return data, [], n_sin_titulo
@@ -353,7 +354,7 @@ if df.empty:
     st.warning("No hay registros con los filtros seleccionados.")
     st.stop()
 
-# Subconjunto con paquete real (excluye "SIN PAQUETE", p. ej. las desestimadas)
+# Subconjunto con paquete real (excluye "SIN PAQUETE", p. ej. los atendidos en otros proyectos)
 df_pq = df[df["Es_PQ"]]
 orden_pkg = [p for p in ORDEN_PQ if p in set(df_pq["Paquete"])]
 
@@ -368,7 +369,7 @@ def tiene(*cols):
 total = len(df)
 ejecucion = int(df["Estado"].str.contains("EJECUCION", na=False).sum())
 encontratacion = int(df["Estado"].str.contains("EN CONTRATACION", na=False).sum())
-desestimadas = int(df["Estado"].str.contains("DESESTIMADA", na=False).sum())
+desestimadas = int(df["Estado"].str.contains("ATENDIDO EN OTROS PROYECTOS", na=False).sum())
 contratado = int(df["Estado"].str.contains("CONTRATADO", na=False).sum())
 culminadas = int(df["Estado"].str.contains("CULMINADO", na=False).sum())
 
@@ -379,7 +380,7 @@ km = df["Km"].sum()
 paquetes_activos = df_pq["Paquete"].nunique()
 
 # Seguimiento = problemas reales. "EN CONTRATACION" es un paso normal, NO es alerta roja.
-RE_PROBLEMA = "DESESTIMADA|PENDIENTE|RIESGO|RETRAS|OBSERV"
+RE_PROBLEMA = "ATENDIDO EN OTROS PROYECTOS|PENDIENTE|RIESGO|RETRAS|OBSERV"
 atencion_mask = df["Estado"].str.contains(RE_PROBLEMA, regex=True, na=False)
 atencion = int(atencion_mask.sum())
 
@@ -402,11 +403,11 @@ def kpi(c, label, value, help_text=f"Acumulado al {FECHA_CORTE}"):
     )
 
 
-nota_imp = "Sin desestimadas" if EXCLUIR_DESESTIMADAS_DEL_IMPACTO else f"Acumulado al {FECHA_CORTE}"
+nota_imp = "Alcance total"
 
 fila1 = st.columns(5, gap="small")
 kpi(fila1[0], "PAQUETES (DEPTO-PQ)", f"{paquetes_activos:,}", "Paquetes con intervenciones")
-kpi(fila1[1], "INTERVENCIONES TOTALES", f"{total:,}", "Incluye desestimadas")
+kpi(fila1[1], "INTERVENCIONES TOTALES", f"{total:,}", "Incluye atendidos en otros proyectos")
 kpi(fila1[2], "CONTRATADOS", f"{contratado:,}", "Procesos adjudicados")
 kpi(fila1[3], "POR CONTRATAR", f"{encontratacion:,}", "En proceso de selección")
 kpi(fila1[4], "EN EJECUCIÓN", f"{ejecucion:,}", "Obras/Actividades activas")
@@ -415,7 +416,7 @@ st.markdown("<div style='margin-bottom: 12px;'></div>", unsafe_allow_html=True)
 
 fila2 = st.columns(5, gap="small")
 kpi(fila2[0], "CULMINADAS", f"{culminadas:,}", "Acumulado al corte")
-kpi(fila2[1], "DESESTIMADAS", f"{desestimadas:,}", "Sin intervención")
+kpi(fila2[1], "ATENDIDOS EN OTROS PROYECTOS", f"{desestimadas:,}", "Sin intervención en este proyecto")
 kpi(fila2[2], "BENEFICIARIOS", f"{benef:,.0f}", nota_imp)
 kpi(fila2[3], "HECTÁREAS", f"{ha:,.2f}", nota_imp)
 kpi(fila2[4], "KILÓMETROS", f"{km:,.2f}", nota_imp)
@@ -504,7 +505,7 @@ pct_ejec = ejecucion / total * 100 if total > 0 else 0
 with a1:
     st.markdown(f"""
     <div class="alert-red"><b>REQUIEREN SEGUIMIENTO</b><br><br>
-    {atencion:,} registros ({pct_atencion:.1f}%) están desestimados, pendientes
+    {atencion:,} registros ({pct_atencion:.1f}%) están atendidos en otros proyectos, pendientes
     o con riesgo/retraso.</div>
     """, unsafe_allow_html=True)
 
@@ -716,10 +717,10 @@ with st.expander("🧪 Control de calidad del Excel"):
         st.warning(f"{len(incons)} intervenciones tienen un paquete que no corresponde a su departamento:")
         st.dataframe(incons[["Departamento", "Provincia", "Distrito", "Sector", "Paquete"]], hide_index=True)
 
-    sin_pq = df0[~df0["Es_PQ"] & ~df0["Estado"].str.contains("DESESTIMADA", na=False)]
+    sin_pq = df0[~df0["Es_PQ"] & ~df0["Estado"].str.contains("ATENDIDO EN OTROS PROYECTOS", na=False)]
     if len(sin_pq):
         problemas += 1
-        st.warning(f"{len(sin_pq)} intervenciones vigentes (no desestimadas) no tienen paquete asignado:")
+        st.warning(f"{len(sin_pq)} intervenciones vigentes (no atendidas en otros proyectos) no tienen paquete asignado:")
         st.dataframe(sin_pq[["Departamento", "Provincia", "Distrito", "Sector", "Estado"]], hide_index=True)
 
     if "Sector" in df0.columns:
@@ -735,8 +736,8 @@ with st.expander("🧪 Control de calidad del Excel"):
         st.warning(f"Hay {N_SIN_TITULO} celdas con datos en columnas sin encabezado del Excel. "
                    "Se ignoraron: ponles nombre o bórralas.")
 
-    n_des_pq = int(df0["Estado"].str.contains("DESESTIMADA", na=False).sum())
-    st.caption(f"Desestimadas: {n_des_pq} · Paquetes con intervenciones: {df0.loc[df0['Es_PQ'], 'Paquete'].nunique()}")
+    n_des_pq = int(df0["Estado"].str.contains("ATENDIDO EN OTROS PROYECTOS", na=False).sum())
+    st.caption(f"Atendidos en otros proyectos: {n_des_pq} · Paquetes con intervenciones: {df0.loc[df0['Es_PQ'], 'Paquete'].nunique()}")
     if problemas == 0:
         st.success("Sin inconsistencias detectadas.")
 
