@@ -24,7 +24,7 @@ UMBRAL_ATRASO_PP = 10               # puntos porcentuales de atraso (real vs pro
 FECHA_CORTE_DT = pd.to_datetime(FECHA_CORTE, format="%d/%m/%Y")
 
 st.set_page_config(
-    page_title=f"Descolmatación FEN · Corte {FECHA_CORTE} - UIR",
+    page_title=f"Descolmatación FEN · Corte {FECHA_CORTE}",
     page_icon="🌊",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -303,7 +303,7 @@ CMAP_DEPTO = mapa_categorias(df0["Departamento"].dropna().unique())
 st.markdown(f"""
 <div class="header">
   <div>
-    <h1>🌊 Descolmatación · Fenómeno El Niño (FEN)</h1>
+    <h1>🌊 Descolmatación · Fenómeno El Niño (FEN) - UIR</h1>
     <p class="situacional">{TITULO_SITUACIONAL}</p>
     <p>Dashboard Ejecutivo PMO · paquetes por departamento · estado · impacto · territorio</p>
   </div>
