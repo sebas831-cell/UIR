@@ -429,22 +429,6 @@ kpi(fila2[4], "KILÓMETROS", f"{km:,.2f}", nota_imp)
 st.markdown('<div class="section">🗺️ Portafolio territorial interactivo</div>', unsafe_allow_html=True)
 st.caption("Haz clic en un punto del mapa o en una barra para profundizar. Los valores respetan los filtros generales del dashboard.")
 
-# Leyenda de referencia para porcentajes de cumplimiento físico.
-# No asigna porcentajes a estados administrativos ni altera los colores del mapa.
-st.markdown("""
-<div style="display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;
-            padding:10px 14px;margin:5px 0 16px;background:white;
-            border:1px solid #C8E6C9;border-radius:10px;font-size:13px">
-  <span style="font-weight:700;color:#1B5E20">Semáforo de cumplimiento:</span>
-  <span><b style="color:#16A34A">●</b> Cumplido (≥100%)</span>
-  <span><b style="color:#84CC16">●</b> Aceptable (70–99%)</span>
-  <span><b style="color:#F59E0B">●</b> En riesgo (40–69%)</span>
-  <span><b style="color:#DC2626">●</b> Crítico (&lt;40%)</span>
-</div>
-""", unsafe_allow_html=True)
-st.caption("Semáforo de referencia: los niveles se aplicarán cuando exista un porcentaje de cumplimiento medido; el mapa actual representa cantidad de intervenciones.")
-
-
 # Coordenadas de referencia de las capitales departamentales. Para provincias y
 # distritos se consulta OpenStreetMap (Nominatim) y se guarda en caché.
 # Cuando no se obtiene una coordenada exacta, se usa la del nivel superior,
@@ -559,7 +543,7 @@ else:
             mapa_df, lat="lat", lon="lon", size="Intervenciones", color="Intervenciones",
             hover_name="Lugar", hover_data={"Beneficiarios": ":,.0f", "Ubicación": True,
                                             "lat": False, "lon": False},
-            color_continuous_scale=[[0, "#A5D6A7"], [0.5, "#43A047"], [1, "#1B5E20"]],
+            color_continuous_scale=[[0, "#F5B301"], [1, "#F5B301"]],
             zoom=4.4 if profundidad == 0 else (6 if profundidad == 1 else 8),
             center={"lat": float(mapa_df.lat.mean()), "lon": float(mapa_df.lon.mean())},
             size_max=36, map_style="open-street-map", height=450,
@@ -567,12 +551,28 @@ else:
         fig_m.update_layout(margin=dict(l=0, r=0, t=5, b=0), coloraxis_showscale=False)
         evento_m = st.plotly_chart(fig_m, key="mapa_port_" + "|".join(ruta_port) + paquete_mapa,
                                     on_select="rerun", selection_mode="points", use_container_width=True)
+        st.caption("🟡 Puntos amarillos: avance porcentual no reportado. El tamaño indica cantidad de intervenciones.")
+        # Leyenda de referencia para porcentajes de cumplimiento físico.
+        # No asigna porcentajes a estados administrativos ni altera los colores del mapa.
+        st.markdown("""
+        <div style="display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;
+                    padding:10px 14px;margin:5px 0 16px;background:white;
+                    border:1px solid #C8E6C9;border-radius:10px;font-size:13px">
+          <span style="font-weight:700;color:#1B5E20">Semáforo de cumplimiento:</span>
+          <span><b style="color:#16A34A">●</b> Cumplido (≥100%)</span>
+          <span><b style="color:#84CC16">●</b> Aceptable (70–99%)</span>
+          <span><b style="color:#F59E0B">●</b> En riesgo (40–69%)</span>
+          <span><b style="color:#DC2626">●</b> Crítico (&lt;40%)</span>
+        </div>
+        """, unsafe_allow_html=True)
+        st.caption("🟡 Sin información: avance porcentual no reportado. Los colores del semáforo se aplicarán cuando existan porcentajes medidos; el mapa y las barras muestran cantidades, no avance.")
+
     with rankcol:
         metrica = st.selectbox("Ordenar por", ["Intervenciones", "Beneficiarios", "Hectareas", "Km"],
                               key="metrica_port")
         ranking_port = resumen_territorio.sort_values(metrica, ascending=True)
         fig_r = px.bar(ranking_port, y="Lugar", x=metrica, orientation="h",
-                       color_discrete_sequence=["#2E7D32"], height=max(450, len(ranking_port) * 32))
+                       color_discrete_sequence=["#F5B301"], height=505)
         fig_r.update_layout(margin=dict(l=10, r=10, t=10, b=10),
                             paper_bgcolor="white", plot_bgcolor="white", yaxis_title=None)
         evento_r = st.plotly_chart(fig_r, key="ranking_port_" + "|".join(ruta_port) + paquete_mapa,
