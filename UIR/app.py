@@ -1,4 +1,6 @@
 import inspect
+import time
+import requests
 import re
 import unicodedata
 from pathlib import Path
@@ -303,7 +305,7 @@ CMAP_DEPTO = mapa_categorias(df0["Departamento"].dropna().unique())
 st.markdown(f"""
 <div class="header">
   <div>
-    <h1>🌊 Descolmatación · Fenómeno El Niño (FEN) - UIR</h1>
+    <h1>🌊 Descolmatación · Fenómeno El Niño (FEN)</h1>
     <p class="situacional">{TITULO_SITUACIONAL}</p>
     <p>Dashboard Ejecutivo PMO · paquetes por departamento · estado · impacto · territorio</p>
   </div>
@@ -422,68 +424,219 @@ kpi(fila2[3], "HECTÁREAS", f"{ha:,.2f}", nota_imp)
 kpi(fila2[4], "KILÓMETROS", f"{km:,.2f}", nota_imp)
 
 # ============================================================
-# PORTAFOLIO POR PAQUETE
+# MAPA INTERACTIVO DEL PORTAFOLIO: DEPARTAMENTO > PROVINCIA > DISTRITO
 # ============================================================
-st.markdown('<div class="section">📦 Portafolio por paquete (por departamento)</div>', unsafe_allow_html=True)
+st.markdown('<div class="section">🗺️ Portafolio territorial interactivo</div>', unsafe_allow_html=True)
+st.caption("Haz clic en un punto del mapa o en una barra para profundizar. Los valores respetan los filtros generales del dashboard.")
 
-if df_pq.empty:
-    st.info("Con los filtros actuales no hay intervenciones asignadas a un paquete.")
+# Leyenda de referencia para porcentajes de cumplimiento físico.
+# No asigna porcentajes a estados administrativos ni altera los colores del mapa.
+st.markdown("""
+<div style="display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;
+            padding:10px 14px;margin:5px 0 16px;background:white;
+            border:1px solid #C8E6C9;border-radius:10px;font-size:13px">
+  <span style="font-weight:700;color:#1B5E20">Semáforo de cumplimiento:</span>
+  <span><b style="color:#16A34A">●</b> Cumplido (≥100%)</span>
+  <span><b style="color:#84CC16">●</b> Aceptable (70–99%)</span>
+  <span><b style="color:#F59E0B">●</b> En riesgo (40–69%)</span>
+  <span><b style="color:#DC2626">●</b> Crítico (&lt;40%)</span>
+</div>
+""", unsafe_allow_html=True)
+st.caption("Semáforo de referencia: los niveles se aplicarán cuando exista un porcentaje de cumplimiento medido; el mapa actual representa cantidad de intervenciones.")
+
+
+# Coordenadas de referencia de las capitales departamentales. Para provincias y
+# distritos se consulta OpenStreetMap (Nominatim) y se guarda en caché.
+# Cuando no se obtiene una coordenada exacta, se usa la del nivel superior,
+# identificada explícitamente como aproximada.
+COORD_DEP = {
+    "PIURA": (-5.1945, -80.6328), "LA LIBERTAD": (-8.1116, -79.0287),
+    "ANCASH": (-9.5278, -77.5278), "LIMA": (-12.0464, -77.0428),
+    "AREQUIPA": (-16.4090, -71.5375),
+}
+NIVELES_TERR = ["Departamento", "Provincia", "Distrito"]
+
+@st.cache_data(ttl=86400 * 30, show_spinner=False)
+def coord_territorio(departamento, provincia="", distrito=""):
+    # Nominatim requiere identificación de la aplicación y límite de consultas.
+    partes = [v for v in (distrito, provincia, departamento, "Peru") if v]
+    try:
+        respuesta = requests.get(
+            "https://nominatim.openstreetmap.org/search",
+            params={"q": ", ".join(partes), "format": "json", "limit": 1, "countrycodes": "pe"},
+            headers={"User-Agent": "FEN2026DashboardTerritorial/1.0 (local analytics)"},
+            timeout=3,
+        )
+        respuesta.raise_for_status()
+        encontrados = respuesta.json()
+        if encontrados:
+            return float(encontrados[0]["lat"]), float(encontrados[0]["lon"]), True
+    except (requests.RequestException, ValueError, KeyError, IndexError):
+        pass
+    return (*COORD_DEP.get(sin_acentos(str(departamento)).upper(), (-9.19, -75.02)), False)
+
+if "ruta_portafolio" not in st.session_state:
+    st.session_state["ruta_portafolio"] = []
+
+ruta_port = st.session_state["ruta_portafolio"]
+# Evitar rutas obsoletas cuando cambian los filtros generales.
+for i, lugar in enumerate(ruta_port):
+    filtro = df.copy()
+    for j, anterior in enumerate(ruta_port[:i]):
+        filtro = filtro[filtro[NIVELES_TERR[j]] == anterior]
+    if lugar not in filtro[NIVELES_TERR[i]].astype(str).unique():
+        st.session_state["ruta_portafolio"] = ruta_port[:i]
+        break
+ruta_port = st.session_state["ruta_portafolio"]
+
+cab1, cab2, cab_ir, cab3, cab4 = st.columns([4, 2.3, 2.3, 1.1, 1.1], vertical_alignment="center")
+cab1.markdown("**🇵🇪 " + " › ".join(["Perú"] + ruta_port) + "**")
+paquetes_mapa = ["Todos los paquetes"] + sorted(df["Paquete"].dropna().unique().tolist(), key=clave_pq)
+paquete_mapa = cab2.selectbox("Paquete en mapa", paquetes_mapa, key="paquete_mapa", label_visibility="collapsed")
+if cab3.button("⬆️ Subir", disabled=not ruta_port, use_container_width=True, key="subir_port"):
+    st.session_state["ruta_portafolio"] = ruta_port[:-1]
+    st.rerun()
+if cab4.button("🏠 Perú", disabled=not ruta_port, use_container_width=True, key="inicio_port"):
+    st.session_state["ruta_portafolio"] = []
+    st.rerun()
+
+territorio = df.copy()
+for i, lugar in enumerate(ruta_port):
+    territorio = territorio[territorio[NIVELES_TERR[i]] == lugar]
+if paquete_mapa != "Todos los paquetes":
+    territorio = territorio[territorio["Paquete"] == paquete_mapa]
+
+if territorio.empty:
+    st.info("No hay intervenciones para esta combinación. Cambia el paquete o vuelve al nivel anterior.")
 else:
-    pkg = (
-        df_pq.assign(
-            _ej=df_pq["Estado"].str.contains("EJECUCION", na=False).astype(int),
-            _cu=df_pq["Estado"].str.contains("CULMINADO", na=False).astype(int),
-        )
-        .groupby("Paquete")
-        .agg(
-            Departamento=("Departamento", "first"),   # cada paquete pertenece a un solo departamento
-            Intervenciones=("Paquete", "size"),
-            En_ejecucion=("_ej", "sum"),
-            Culminadas=("_cu", "sum"),
-            Beneficiarios=("Beneficiarios", "sum"),
-            Hectareas=("Hectareas", "sum"),
-            Km=("Km", "sum"),
-            Provincias=("Provincia", "nunique"),
-        )
-        .loc[orden_pkg]
-        .reset_index()
-    )
+    k1, k2, k3, k4 = st.columns(4)
+    kpi(k1, "INTERVENCIONES", f"{len(territorio):,}", "Selección territorial")
+    kpi(k2, "BENEFICIARIOS", f"{territorio['Beneficiarios'].sum():,.0f}", "Alcance total de la selección")
+    kpi(k3, "DISTRITOS", f"{territorio[['Departamento', 'Provincia', 'Distrito']].drop_duplicates().shape[0]:,}", "Distritos en la selección")
+    kpi(k4, "PAQUETES", f"{territorio.loc[territorio['Es_PQ'], 'Paquete'].nunique():,}", "Paquetes en la selección")
+    st.write("")
 
-    c1, c2 = st.columns(2)
-    with c1:
-        mostrar(barras(pkg, "Paquete", "Intervenciones", "Intervenciones por paquete",
-                       color_col="Departamento", cmap=CMAP_DEPTO, orden=orden_pkg))
-    with c2:
-        mostrar(barras(pkg, "Paquete", "Beneficiarios", "Beneficiarios por paquete",
-                       color_col="Departamento", cmap=CMAP_DEPTO, orden=orden_pkg))
+    profundidad = len(ruta_port)
+    nivel_hijo = NIVELES_TERR[min(profundidad, 2)]
+    if profundidad < 3:
+        resumen_territorio = territorio.groupby(nivel_hijo, dropna=False).agg(
+            Intervenciones=("Estado", "size"), Beneficiarios=("Beneficiarios", "sum"),
+            Hectareas=("Hectareas", "sum"), Km=("Km", "sum"),
+            Paquetes=("Paquete", lambda x: x[x != "SIN PAQUETE"].nunique()),
+        ).reset_index().rename(columns={nivel_hijo: "Lugar"})
+        resumen_territorio["Lugar"] = resumen_territorio["Lugar"].fillna("SIN ESPECIFICAR").astype(str)
+        opciones_ir = resumen_territorio["Lugar"].tolist()
+        elegir = cab_ir.selectbox(f"Ir a {nivel_hijo.lower()}", ["Seleccionar..."] + opciones_ir,
+                                    key="ir_port_" + "|".join(ruta_port),
+                                    label_visibility="collapsed")
+        if elegir != "Seleccionar...":
+            st.session_state["ruta_portafolio"] = ruta_port + [elegir]
+            st.rerun()
+    else:
+        cab_ir.caption("📍 Distrito seleccionado")
+        resumen_territorio = territorio.groupby("Paquete").agg(
+            Intervenciones=("Estado", "size"), Beneficiarios=("Beneficiarios", "sum"),
+            Hectareas=("Hectareas", "sum"), Km=("Km", "sum")
+        ).reset_index().rename(columns={"Paquete": "Lugar"})
 
-    with st.expander("Ver tabla resumen por paquete"):
-        st.dataframe(
-            pkg.rename(columns={"En_ejecucion": "En ejecución"}).style.format(
-                {"Beneficiarios": "{:,.0f}", "Hectareas": "{:,.2f}", "Km": "{:,.2f}"}),
-            hide_index=True,
+    mapcol, rankcol = st.columns([3, 2])
+    with mapcol:
+        st.markdown(f"**Mapa · {nivel_hijo if profundidad < 3 else 'Distrito seleccionado'}**")
+        puntos = []
+        for reg in resumen_territorio.itertuples(index=False):
+            nombre = str(reg.Lugar)
+            sub = territorio[territorio[nivel_hijo] == nombre] if profundidad < 3 else territorio
+            dep = nombre if profundidad == 0 else ruta_port[0]
+            prov = nombre if profundidad == 1 else (ruta_port[1] if profundidad >= 2 else "")
+            dis = nombre if profundidad == 2 else (ruta_port[2] if profundidad == 3 else "")
+            lat, lon, exacto = coord_territorio(dep, prov, dis)
+            puntos.append({"Lugar": nombre, "lat": lat, "lon": lon,
+                           "Intervenciones": int(reg.Intervenciones),
+                           "Beneficiarios": float(reg.Beneficiarios),
+                           "Ubicación": "Georreferenciada" if exacto else "Referencia aproximada"})
+        mapa_df = pd.DataFrame(puntos)
+        fig_m = px.scatter_map(
+            mapa_df, lat="lat", lon="lon", size="Intervenciones", color="Intervenciones",
+            hover_name="Lugar", hover_data={"Beneficiarios": ":,.0f", "Ubicación": True,
+                                            "lat": False, "lon": False},
+            color_continuous_scale=[[0, "#A5D6A7"], [0.5, "#43A047"], [1, "#1B5E20"]],
+            zoom=4.4 if profundidad == 0 else (6 if profundidad == 1 else 8),
+            center={"lat": float(mapa_df.lat.mean()), "lon": float(mapa_df.lon.mean())},
+            size_max=36, map_style="open-street-map", height=450,
         )
+        fig_m.update_layout(margin=dict(l=0, r=0, t=5, b=0), coloraxis_showscale=False)
+        evento_m = st.plotly_chart(fig_m, key="mapa_port_" + "|".join(ruta_port) + paquete_mapa,
+                                    on_select="rerun", selection_mode="points", use_container_width=True)
+    with rankcol:
+        metrica = st.selectbox("Ordenar por", ["Intervenciones", "Beneficiarios", "Hectareas", "Km"],
+                              key="metrica_port")
+        ranking_port = resumen_territorio.sort_values(metrica, ascending=True)
+        fig_r = px.bar(ranking_port, y="Lugar", x=metrica, orientation="h",
+                       color_discrete_sequence=["#2E7D32"], height=max(450, len(ranking_port) * 32))
+        fig_r.update_layout(margin=dict(l=10, r=10, t=10, b=10),
+                            paper_bgcolor="white", plot_bgcolor="white", yaxis_title=None)
+        evento_r = st.plotly_chart(fig_r, key="ranking_port_" + "|".join(ruta_port) + paquete_mapa,
+                                    on_select="rerun", selection_mode="points", use_container_width=True)
+
+    if profundidad < 3:
+        clic = None
+        for evento, tabla, eje in [(evento_m, mapa_df, "mapa"), (evento_r, ranking_port, "ranking")]:
+            puntos_sel = evento.selection.points if evento and evento.selection else []
+            if puntos_sel:
+                psel = puntos_sel[0]
+                indice = psel.get("point_index", psel.get("point_number"))
+                if indice is not None and 0 <= indice < len(tabla):
+                    clic = str(tabla.iloc[indice]["Lugar"])
+                    break
+        if clic and clic in opciones_ir:
+            st.session_state["ruta_portafolio"] = ruta_port + [clic]
+            st.rerun()
+
+    with st.expander("Ver detalle de la selección territorial", expanded=profundidad == 3):
+        st.dataframe(resumen_territorio.sort_values("Intervenciones", ascending=False),
+                     hide_index=True, use_container_width=True)
+        if profundidad == 3:
+            st.markdown("**Intervenciones del distrito**")
+            detalle_cols = [c for c in ["Paquete", "Sector", "Estado", "Beneficiarios", "Hectareas", "Km"]
+                            if c in territorio.columns]
+            st.dataframe(territorio[detalle_cols], hide_index=True, use_container_width=True)
 
 # ============================================================
 # ESTADO DEL PORTAFOLIO
 # ============================================================
 st.markdown('<div class="section">📈 Estado del portafolio</div>', unsafe_allow_html=True)
 
+# La misma selección del mapa alimenta esta sección; los filtros generales
+# ya están aplicados en `territorio`.
+df_estado = territorio.copy()
+df_estado_pq = df_estado[df_estado["Es_PQ"]]
+orden_estado = [p for p in ORDEN_PQ if p in set(df_estado_pq["Paquete"])]
+total_estado = len(df_estado)
+ejecucion_estado = int(df_estado["Estado"].str.contains("EJECUCION", na=False).sum())
+atencion_estado = int(df_estado["Estado"].str.contains(RE_PROBLEMA, regex=True, na=False).sum())
+pct_atencion = atencion_estado / total_estado * 100 if total_estado else 0
+pct_ejec = ejecucion_estado / total_estado * 100 if total_estado else 0
+
+st.caption("Ámbito: " + " › ".join(["Perú"] + ruta_port) +
+           (f" · {paquete_mapa}" if paquete_mapa != "Todos los paquetes" else ""))
 e1, e2 = st.columns([1, 1.4])
 
 with e1:
-    est = df.groupby("Estado").size().reset_index(name="Registros")
-    mostrar(pie(est, "Estado", "Registros", "Distribución por estado", cmap=CMAP_ESTADO))
+    est = df_estado.groupby("Estado").size().reset_index(name="Registros")
+    if est.empty:
+        st.info("Sin estados para la selección actual.")
+    else:
+        mostrar(pie(est, "Estado", "Registros", "Distribución por estado", cmap=CMAP_ESTADO))
 
 with e2:
-    if df_pq.empty:
+    if df_estado_pq.empty:
         st.info("Sin paquetes para mostrar estados por paquete.")
     else:
-        est_pkg = df_pq.groupby(["Paquete", "Estado"]).size().reset_index(name="Registros")
+        est_pkg = df_estado_pq.groupby(["Paquete", "Estado"]).size().reset_index(name="Registros")
         fig = px.bar(
             est_pkg, x="Paquete", y="Registros", color="Estado",
             color_discrete_map=CMAP_ESTADO,
-            category_orders={"Paquete": orden_pkg},
+            category_orders={"Paquete": orden_estado},
         )
         fig.update_layout(
             barmode="stack",
@@ -494,23 +647,21 @@ with e2:
             showlegend=False,   # los colores son los mismos de la dona de la izquierda
         )
         fig.update_xaxes(type="category", categoryorder="array",
-                         categoryarray=orden_pkg, tickangle=-45)
+                         categoryarray=orden_estado, tickangle=-45)
         mostrar(fig)
 
 # Alertas
 a1, a2, a3 = st.columns(3)
-pct_atencion = atencion / total * 100 if total > 0 else 0
-pct_ejec = ejecucion / total * 100 if total > 0 else 0
 
 with a1:
     st.markdown(f"""
     <div class="alert-red"><b>REQUIEREN SEGUIMIENTO</b><br><br>
-    {atencion:,} registros ({pct_atencion:.1f}%) están atendidos en otros proyectos, pendientes
+    {atencion_estado:,} registros ({pct_atencion:.1f}%) están atendidos en otros proyectos, pendientes
     o con riesgo/retraso.</div>
     """, unsafe_allow_html=True)
 
 with a2:
-    cuello = df_pq[df_pq["Estado"].str.contains("EN CONTRATACION|PENDIENTE|RIESGO|RETRAS|OBSERV",
+    cuello = df_estado_pq[df_pq["Estado"].str.contains("EN CONTRATACION|PENDIENTE|RIESGO|RETRAS|OBSERV",
                                                 regex=True, na=False)]
     if len(cuello):
         top = cuello["Paquete"].value_counts()
@@ -524,7 +675,7 @@ with a2:
 with a3:
     st.markdown(f"""
     <div class="alert-green"><b>AVANCE</b><br><br>
-    {ejecucion:,} registros ({pct_ejec:.1f}%) se encuentran en ejecución.</div>
+    {ejecucion_estado:,} registros ({pct_ejec:.1f}%) se encuentran en ejecución.</div>
     """, unsafe_allow_html=True)
 
 # ============================================================
